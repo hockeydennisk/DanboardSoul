@@ -35,7 +35,6 @@
 #define SV_PMIN  5  //pot_min
 #define SV_PMAX  6  //pot_max
 
-
 #define InputButton  4
 #define IDLE_COUNT_LIMIT  20
 
@@ -50,8 +49,28 @@ int servoConfig[SERVOS_TOTAL][7] = {
 Servo danboardServo[SERVOS_TOTAL];
 int aiValue[SERVOS_TOTAL] = {0};
 int idleCount[SERVOS_TOTAL] = {0};
-int newAiValue = 0;
-int mapAiValue = 0;
+//int newAiValue = 0;
+//int mapAiValue = 0;
+
+int currentMode = 0;  //0:Auto Mode, 1:Mimic Mode, 2:Dancer Mode
+#define MODE_AUTO   0
+#define MODE_MIMIC  1
+#define MODE_DANCE  2
+
+/*Dance Song 01: Little Apple*/
+#define TEMPO_MAX_01  10
+int danceTempo01 = 100;  //ms
+int danceAngle01[SERVOS_TOTAL][TEMPO_MAX_01] = {
+    //Head
+    { 90,  110,  90,  70,  50,  30,  50,  70,  90,  90},
+    //Left Hand
+    { 90,  110,  90,  70,  50,  30,  50,  70,  90,  90},
+    //Right Had
+    { 90,  110,  90,  70,  50,  30,  50,  70,  90,  90},
+    //Body
+    { 90,  110,  90,  70,  50,  30,  50,  70,  90,  90},
+};
+
 
 void setup() {
   // put your setup code here, to run once:
@@ -59,6 +78,9 @@ void setup() {
   
   Serial.begin(115200);
   Serial.println("Danboard Bot ready...");
+  
+  //init Mode
+  currentMode = MODE_AUTO; //MODE_MIMIC;  //MODE_DANCE;
 
 }
 
@@ -71,53 +93,58 @@ void loop() {
   //int inputValue = digitalRead(InputButton);
   //Serial.println(inputValue);
   
-  /*Auto Test Every Parts*/
-  #if 1
-  HeadPartTest();
-  LeftHandTest();
-  RightHandTest();
-  BodyPartTest();
-  #endif
-  
-  #if 0
-  newAiValue = analogRead(servoConfig[HEAD][SV_POT]);
-  if ((newAiValue - aiValue[HEAD]) < 5)
+  switch(currentMode)
   {
-    idleCount[HEAD]++;
-  }
-  else
-  {
-    //reset idle count
-    idleCount[HEAD] = 0;
+    case MODE_AUTO:
+        /*Auto Mode: Auto Test Every Parts*/
+        HeadPartTest();
+        LeftHandTest();
+        RightHandTest();
+        BodyPartTest();
+        break;
+
+    case MODE_MIMIC:
+        /*Mimic Mode: Every Parts acted according to Analog Input Potentiometer value.*/
+        /*Only control Left/Right hands for Kaohsiung mini Maker Faire*/
+        rotateServoWithAnalogInput(LEFT);
+        rotateServoWithAnalogInput(RIGHT);
+        delay(100);
+        break;
+
+    case MODE_DANCE:
+        danceSong01();
+        //danceSong02();
+        delay(50);
+        break;
+
+    default:
+        break;
   }
 
-  if (idleCount[HEAD] > IDLE_COUNT_LIMIT)
+#if 0  
+  /*Auto Mode: Auto Test Every Parts*/
+  if (currentMode == MODE_AUTO)
   {
-    Serial.println("into Idle state...");
-    danboardServo[HEAD].detach();
+    HeadPartTest();
+    LeftHandTest();
+    RightHandTest();
+    BodyPartTest();
   }
-  else
+
+  /*Mimic Mode: Every Parts acted according to Analog Input Potentiometer value.*/
+  /*Only control Left/Right hands for Kaohsiung mini Maker Faire*/
+  if (currentMode == MODE_MIMIC)
   {
-    aiValue[HEAD] = newAiValue;
-    Serial.println("into Working state...");
-
-    mapAiValue = map(newAiValue, servoConfig[HEAD][SV_PMIN], servoConfig[HEAD][SV_PMAX], servoConfig[HEAD][SV_MIN], servoConfig[HEAD][SV_MAX]);
-    Serial.print(newAiValue);
-    Serial.print("->");
-    Serial.println(mapAiValue);
-
-    if (!danboardServo[HEAD].attached()) {
-      danboardServo[HEAD].attach(servoConfig[HEAD][SV_PIN]);
-    }
-    danboardServo[HEAD].write(mapAiValue);
+    rotateServoWithAnalogInput(LEFT);
+    rotateServoWithAnalogInput(RIGHT);
     delay(100);
-    //danboardServo[HEAD].detach();
-
   }
   
-  #endif
-  
-
+  if (currentMode == MODE_DANCE)
+  {
+    delay(50);
+  }
+#endif
 
 }
 
@@ -226,5 +253,72 @@ void BodyPartTest()
   delay(500);
   danboardServo[BODY].detach();
   #endif
+}
+
+void rotateServoWithAnalogInput(int component)
+{
+  int newAiValue;
+  int mapAiValue;
+  
+  newAiValue = analogRead(servoConfig[component][SV_POT]);
+  if ((newAiValue - aiValue[component]) < 5)
+  {
+    idleCount[component]++;
+  }
+  else
+  {
+    //reset idle count
+    idleCount[component] = 0;
+  }
+
+  if (idleCount[component] > IDLE_COUNT_LIMIT)
+  {
+    Serial.println("into Idle state...");
+    danboardServo[component].detach();
+  }
+  else
+  {
+    aiValue[component] = newAiValue;
+    //Serial.println("into Working state...");
+
+    mapAiValue = map(newAiValue, servoConfig[component][SV_PMIN], servoConfig[component][SV_PMAX], servoConfig[component][SV_MIN], servoConfig[component][SV_MAX]);
+    Serial.print("Component:");
+    Serial.print(component);
+    Serial.print(":  ");
+    Serial.print(newAiValue);
+    Serial.print("->");
+    Serial.println(mapAiValue);
+
+    if (!danboardServo[component].attached()) {
+      danboardServo[component].attach(servoConfig[component][SV_PIN]);
+    }
+    danboardServo[component].write(mapAiValue);
+    //delay(100);
+    //danboardServo[component].detach();
+  }
+}
+
+void danceSong01()
+{
+  //Dancing Begin
+  for(int i=0; i<SERVOS_TOTAL; i++) {
+    danboardServo[i].attach(servoConfig[i][SV_PIN]);
+  }
+
+  for(int i=0;  i<TEMPO_MAX_01;  i++)
+  {
+    danboardServo[HEAD].write(danceAngle01[HEAD][i]);
+    danboardServo[LEFT].write(danceAngle01[LEFT][i]);
+    danboardServo[RIGHT].write(danceAngle01[RIGHT][i]);
+    danboardServo[BODY].write(danceAngle01[BODY][i]);
+    delay(danceTempo01);
+  }
+
+  //Dancing End
+  for(int i=0; i<SERVOS_TOTAL; i++) {
+    danboardServo[i].detach();
+  }
 
 }
+
+
